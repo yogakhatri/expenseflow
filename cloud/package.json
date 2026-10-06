@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "devDependencies": {
-    "typescript": "5.8.3",
+    "typescript": "7.0.2",
     "wrangler": "4.147.0"
   },
   "scripts": {
