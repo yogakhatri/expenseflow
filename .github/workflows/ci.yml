@@ -18,7 +18,7 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build -o /tmp/expenseflow ./local
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Check browser JavaScript
