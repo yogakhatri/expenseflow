@@ -1,0 +1,16 @@
+{
+  "name": "expenseflow-cloud",
+  "version": "0.6.0",
+  "private": true,
+  "devDependencies": {
+    "typescript": "5.8.3",
+    "wrangler": "4.147.0"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "migrate": "wrangler d1 migrations apply expenseflow --remote",
+    "deploy": "wrangler deploy",
+    "auth:setup": "node scripts/auth-setup.mjs"
+  }
+}

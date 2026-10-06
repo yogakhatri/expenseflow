@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/auth.css?v=7">
+  <title>Sign in · ExpenseFlow</title>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card" aria-labelledby="authTitle">
+      <div class="auth-brand"><span>₹</span><strong>ExpenseFlow</strong></div>
+      <h1 id="authTitle">Private access</h1>
+      <p class="auth-copy">Enter your ExpenseFlow password to continue.</p>
+      <form id="loginForm" autocomplete="on">
+        <label for="password">Password</label>
+        <div class="password-row">
+          <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required autofocus>
+          <button id="togglePassword" class="secondary" type="button" aria-label="Show password">Show</button>
+        </div>
+        <button id="loginButton" class="primary" type="submit">Sign in</button>
+      </form>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+      <p class="privacy">Your password is verified by your Cloudflare Worker and is never stored in browser storage.</p>
+    </section>
+  </main>
+  <script type="module" src="/auth.js?v=7"></script>
+</body>
+</html>

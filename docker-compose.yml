@@ -1,0 +1,32 @@
+services:
+  expenseflow:
+    build: .
+    container_name: expenseflow
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  ollama:
+    image: ollama/ollama:0.34.0
+    container_name: expenseflow-ollama
+    restart: unless-stopped
+    profiles: ["ai"]
+    volumes:
+      - ollama-data:/root/.ollama
+    expose:
+      - "11434"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ollama-data:
+    name: expenseflow-ollama-data

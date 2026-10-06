@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta id="themeColor" name="theme-color" content="#f7f7f8">
+  <meta name="description" content="Private, lightweight personal expense tracking.">
+  <link rel="manifest" href="/manifest.json?v=7">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css?v=7">
+  <link rel="modulepreload" href="/api.js?v=7">
+  <link rel="modulepreload" href="/router.js?v=7">
+  <link rel="modulepreload" href="/charts.js?v=7">
+  <title>ExpenseFlow</title>
+</head>
+<body>
+  <aside class="sidebar" aria-label="Primary navigation">
+    <a class="brand" href="#/dashboard" aria-label="ExpenseFlow overview">
+      <span class="brand-mark">₹</span>
+      <span><strong>ExpenseFlow</strong><small>Private finance</small></span>
+    </a>
+
+    <a class="desktop-add" href="#/add"><span class="add-glyph">+</span><span>Add expense</span></a>
+
+    <nav class="side-nav">
+      <a href="#/dashboard" data-route="dashboard">Overview</a>
+      <a href="#/transactions" data-route="transactions">Transactions</a>
+      <a href="#/plan" data-route="plan">Budget & income</a>
+      <a href="#/more" data-route="more">More</a>
+    </nav>
+
+    <div class="sidebar-foot" id="connectionStateDesktop">Local & private</div>
+  </aside>
+
+  <div class="workspace">
+    <header class="mobile-header">
+      <a class="mobile-brand" href="#/dashboard" aria-label="ExpenseFlow overview">
+        <span class="brand-mark small">₹</span>
+        <strong>ExpenseFlow</strong>
+      </a>
+      <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle theme" title="Toggle theme">◐</button>
+    </header>
+
+    <main id="app" class="app-shell" aria-live="polite"></main>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Primary navigation">
+    <a href="#/dashboard" data-route="dashboard"><span>⌂</span><small>Overview</small></a>
+    <a href="#/transactions" data-route="transactions"><span>☷</span><small>Transactions</small></a>
+    <a href="#/add" data-route="add" class="bottom-add"><span>＋</span><small>Add</small></a>
+    <a href="#/plan" data-route="plan"><span>◎</span><small>Budget</small></a>
+    <a href="#/more" data-route="more"><span>•••</span><small>More</small></a>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js?v=7"></script>
+</body>
+</html>
