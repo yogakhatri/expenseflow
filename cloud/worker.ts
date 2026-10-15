@@ -1,8 +1,9 @@
-import { Env, bad, fingerprint, json, norm, validDate } from './db';
+import type { Env } from './db';
+import { bad, fingerprint, json, norm, validDate } from './db';
 import { authConfigured, authRequired, authStatus, isAuthenticated, login, logout } from './auth';
+import { readJSON } from './request';
 
 const APP_VERSION = '0.6.0';
-const API_LIMIT = 1_048_576;
 const MAX_BULK = 500;
 
 const securityHeaders: Record<string, string> = {
@@ -31,13 +32,6 @@ function sameOrigin(request: Request): boolean {
   const origin = request.headers.get('Origin');
   if (!origin) return true;
   try { return new URL(origin).host === new URL(request.url).host; } catch { return false; }
-}
-
-async function readJSON<T = any>(request: Request): Promise<T> {
-  const length = Number(request.headers.get('content-length') || 0);
-  if (length > API_LIMIT) throw Object.assign(new Error('Request too large'), { status: 413 });
-  try { return await request.json() as T; }
-  catch { throw Object.assign(new Error('Invalid JSON request'), { status: 400 }); }
 }
 
 function parsePaise(value: string): number | null {
@@ -90,9 +84,15 @@ function paymentAlias(value: string): string {
 }
 
 async function validTransaction(env: Env, input: any): Promise<string> {
-  if (!Number.isInteger(input.amount_paise) || input.amount_paise <= 0) return 'Invalid amount';
+  if (!input || typeof input !== 'object') return 'Invalid transaction';
+  if (!Number.isSafeInteger(input.amount_paise) || input.amount_paise <= 0 || input.amount_paise > 10_000_000_000) return 'Invalid amount';
   if (typeof input.description !== 'string' || !input.description.trim() || input.description.length > 300) return 'Invalid description';
-  if (typeof input.notes === 'string' && input.notes.length > 2000) return 'Notes are too long';
+  if (input.notes != null && (typeof input.notes !== 'string' || input.notes.length > 2000)) return 'Invalid notes';
+  if (input.raw_input != null && (typeof input.raw_input !== 'string' || input.raw_input.length > 20_000)) return 'Invalid raw input';
+  if (input.source != null && typeof input.source !== 'string') return 'Invalid source';
+  if (!Number.isSafeInteger(input.category_id) || input.category_id <= 0) return 'Invalid category';
+  if (!Number.isSafeInteger(input.payment_method_id) || input.payment_method_id <= 0) return 'Invalid payment method';
+  if (input.account_id != null && (!Number.isSafeInteger(input.account_id) || input.account_id <= 0)) return 'Invalid account';
   if (!validDate(input.transaction_date)) return 'Invalid date';
   const [category, payment, account] = await Promise.all([
     env.DB.prepare('SELECT 1 FROM categories WHERE id=?').bind(input.category_id).first(),
@@ -109,18 +109,17 @@ async function createTransaction(env: Env, input: any, allowDuplicate = false): 
   const validation = await validTransaction(env, input);
   if (validation) throw Object.assign(new Error(validation), { status: 400 });
   const fp = await fingerprint(input);
-  if (!allowDuplicate) {
-    const duplicate = await env.DB.prepare('SELECT id FROM transactions WHERE fingerprint=? LIMIT 1').bind(fp).first();
-    if (duplicate) throw Object.assign(new Error('Possible duplicate transaction'), { status: 409, duplicate: true });
-  }
+  // The duplicate predicate and write must execute in the same SQL statement.
   const result = await env.DB.prepare(`
     INSERT INTO transactions(amount_paise,description,category_id,payment_method_id,account_id,transaction_date,notes,raw_input,source,ai_processed,fingerprint)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+    SELECT ?,?,?,?,?,?,?,?,?,?,?
+    WHERE ? OR NOT EXISTS (SELECT 1 FROM transactions WHERE fingerprint=?)
   `).bind(
     input.amount_paise, input.description.trim(), input.category_id, input.payment_method_id,
     input.account_id || null, input.transaction_date, input.notes || '', input.raw_input || '',
-    input.source || 'manual', input.ai_processed ? 1 : 0, fp,
+    input.source || 'manual', input.ai_processed ? 1 : 0, fp, allowDuplicate ? 1 : 0, fp,
   ).run();
+  if (!result.meta.changes) throw Object.assign(new Error('Possible duplicate transaction'), { status: 409, duplicate: true });
   return Number(result.meta.last_row_id || 0);
 }
 
@@ -135,6 +134,11 @@ async function handleParse(request: Request, env: Env): Promise<Response> {
   const other = categories.get('other') || 0;
   const cash = payments.get('cash') || 0;
   const account = accounts.get('cash') || null;
+  const rules = await env.DB.prepare(`
+    SELECT r.category_id,c.name category_name,r.keyword,r.merchant
+    FROM categorization_rules r JOIN categories c ON c.id=r.category_id
+    WHERE r.enabled=1 ORDER BY r.priority,r.id
+  `).all<any>();
   const items: any[] = [];
   for (const [index, raw] of input.text.split(/\r?\n/).entries()) {
     const line = raw.trim();
@@ -150,9 +154,17 @@ async function handleParse(request: Request, env: Env): Promise<Response> {
     if (!payments.get(paymentName)) { needsReview = true; paymentName = 'cash'; }
     const date = parts[3]?.trim() || localDate;
     if (!validDate(date)) return bad(`Line ${index + 1} has invalid date`);
-    let categoryName = norm(parts[4] || 'other');
+    const explicitCategory = parts[4]?.trim() || '';
+    let categoryName = norm(explicitCategory || 'other');
     let category = categories.get(categoryName) || other;
-    if (parts[4] && !categories.get(categoryName)) { needsReview = true; categoryName = 'other'; }
+    if (explicitCategory && !categories.get(categoryName)) { needsReview = true; categoryName = 'other'; }
+    if (!explicitCategory) {
+      const normalizedDescription = norm(description);
+      const rule = rules.results.find(rule =>
+        (rule.keyword && normalizedDescription.includes(norm(rule.keyword))) ||
+        (rule.merchant && normalizedDescription.includes(norm(rule.merchant))));
+      if (rule) { category = Number(rule.category_id); categoryName = rule.category_name; }
+    }
     items.push({
       amount_paise: amount, description, category_id: category, category_name: categoryName,
       payment_method_id: payment, payment_name: paymentName, account_id: account,
@@ -212,26 +224,45 @@ async function handleBulk(request: Request, env: Env): Promise<Response> {
     const validation = await validTransaction(env, item);
     if (validation) return bad(validation);
     const fp = await fingerprint(item);
-    if (seen.has(fp) && !payload.allow_duplicates) return json({ error: 'Possible duplicate transactions', duplicate: true }, 409);
+    if (seen.has(fp) && payload.allow_duplicates !== true) return json({ error: 'Possible duplicate transactions', duplicate: true }, 409);
     seen.add(fp); fingerprints.push(fp);
   }
-  if (!payload.allow_duplicates) {
-    for (const fp of fingerprints) {
-      if (await env.DB.prepare('SELECT id FROM transactions WHERE fingerprint=? LIMIT 1').bind(fp).first()) {
-        return json({ error: 'Possible duplicate transactions', duplicate: true }, 409);
-      }
-    }
-  }
-  const statements = payload.items.map((item: any, index: number) => env.DB.prepare(`
+  const incoming = payload.items.map((item: any, index: number) => ({
+    amount_paise: item.amount_paise, description: item.description.trim(),
+    category_id: item.category_id, payment_method_id: item.payment_method_id,
+    account_id: item.account_id ?? null, transaction_date: item.transaction_date,
+    notes: item.notes || '', raw_input: item.raw_input || '',
+    source: item.source || 'manual', ai_processed: item.ai_processed ? 1 : 0,
+    fingerprint: fingerprints[index],
+  }));
+  // One statement checks every fingerprint and inserts the whole batch. A
+  // concurrent save cannot slip between checking and writing, and a conflict
+  // inserts zero rows rather than partially saving the batch.
+  const result = await env.DB.prepare(`
+    WITH incoming AS MATERIALIZED (
+      SELECT
+        json_extract(value,'$.amount_paise') amount_paise,
+        json_extract(value,'$.description') description,
+        json_extract(value,'$.category_id') category_id,
+        json_extract(value,'$.payment_method_id') payment_method_id,
+        json_extract(value,'$.account_id') account_id,
+        json_extract(value,'$.transaction_date') transaction_date,
+        json_extract(value,'$.notes') notes,
+        json_extract(value,'$.raw_input') raw_input,
+        json_extract(value,'$.source') source,
+        json_extract(value,'$.ai_processed') ai_processed,
+        json_extract(value,'$.fingerprint') fingerprint
+      FROM json_each(?)
+    )
     INSERT INTO transactions(amount_paise,description,category_id,payment_method_id,account_id,transaction_date,notes,raw_input,source,ai_processed,fingerprint)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?)
-  `).bind(
-    item.amount_paise, item.description.trim(), item.category_id, item.payment_method_id,
-    item.account_id || null, item.transaction_date, item.notes || '', item.raw_input || '',
-    item.source || 'manual', item.ai_processed ? 1 : 0, fingerprints[index],
-  ));
-  await env.DB.batch(statements);
-  return json({ created: statements.length }, 201);
+    SELECT amount_paise,description,category_id,payment_method_id,account_id,transaction_date,notes,raw_input,source,ai_processed,fingerprint
+    FROM incoming
+    WHERE ? OR NOT EXISTS (
+      SELECT 1 FROM transactions t JOIN incoming i ON i.fingerprint=t.fingerprint
+    )
+  `).bind(JSON.stringify(incoming), payload.allow_duplicates === true ? 1 : 0).run();
+  if (!result.meta.changes) return json({ error: 'Possible duplicate transactions', duplicate: true }, 409);
+  return json({ created: result.meta.changes }, 201);
 }
 
 async function handleBulkDelete(request: Request, env: Env): Promise<Response> {
@@ -258,8 +289,14 @@ async function handleTransactionByID(request: Request, env: Env, id: number): Pr
   const result = await env.DB.prepare(`
     UPDATE transactions SET amount_paise=?,description=?,category_id=?,payment_method_id=?,account_id=?,transaction_date=?,notes=?,fingerprint=?,version=version+1,updated_at=CURRENT_TIMESTAMP
     WHERE id=? AND version=?
-  `).bind(input.amount_paise,input.description.trim(),input.category_id,input.payment_method_id,input.account_id||null,input.transaction_date,input.notes||'',fp,id,input.version).run();
-  if (!result.meta.changes) return bad('Transaction changed elsewhere; refresh and retry', 409);
+      AND NOT EXISTS (SELECT 1 FROM transactions WHERE fingerprint=? AND id<>?)
+  `).bind(input.amount_paise,input.description.trim(),input.category_id,input.payment_method_id,input.account_id||null,input.transaction_date,input.notes||'',fp,id,input.version,fp,id).run();
+  if (!result.meta.changes) {
+    if (await env.DB.prepare('SELECT id FROM transactions WHERE fingerprint=? AND id<>? LIMIT 1').bind(fp,id).first()) {
+      return json({ error: 'Possible duplicate transaction', duplicate: true }, 409);
+    }
+    return bad('Transaction changed elsewhere; refresh and retry', 409);
+  }
   return json({ ok: true });
 }
 
@@ -577,7 +614,7 @@ async function handlePending(request:Request,env:Env):Promise<Response>{
 
 async function handleExport(env:Env):Promise<Response>{
   const r=await env.DB.prepare(`SELECT t.transaction_date,t.amount_paise,t.description,c.name category,p.name payment,COALESCE(a.name,'') account,t.notes FROM transactions t JOIN categories c ON c.id=t.category_id JOIN payment_methods p ON p.id=t.payment_method_id LEFT JOIN accounts a ON a.id=t.account_id ORDER BY t.transaction_date,t.id`).all<any>();
-  const lines=['Date,Amount,Description,Category,Payment,Account,Notes'];for(const x of r.results)lines.push([x.transaction_date,formatPaise(Number(x.amount_paise)),x.description,x.category,x.payment,x.account,x.notes].map((v:any)=>csvSafe(String(v??''))).join(','));return new Response(lines.join('\n')+'\n',{headers:{'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="expenseflow.csv"'}})
+  const lines=['Date,Amount,Description,Category,Payment,Account,Notes'];for(const x of r.results)lines.push([x.transaction_date,formatPaise(Number(x.amount_paise)),x.description,x.category,x.payment,x.account,x.notes].map((v:any)=>csvSafe(String(v??''))).join(','));return new Response(lines.join('\n')+'\n',{headers:{'content-type':'text/csv; charset=utf-8','cache-control':'no-store','content-disposition':'attachment; filename="expenseflow.csv"'}})
 }
 
 async function handleImport(request:Request,env:Env):Promise<Response>{

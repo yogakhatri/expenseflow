@@ -13,7 +13,6 @@
     "noUnusedParameters": true
   },
   "include": [
-    "*.ts",
-    "types.d.ts"
+    "*.ts"
   ]
 }

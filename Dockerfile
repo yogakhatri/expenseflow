@@ -1,8 +1,8 @@
 FROM golang:1.27-alpine AS build
 RUN apk add --no-cache build-base
 WORKDIR /src
-COPY go.mod go.sum* ./
-RUN if [ -f go.sum ]; then go mod download; else go mod download; fi
+COPY go.mod go.sum ./
+RUN go mod download
 COPY local ./local
 RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/expenseflow ./local
 
@@ -13,7 +13,7 @@ RUN addgroup -S expenseflow && adduser -S -G expenseflow expenseflow \
 WORKDIR /app
 COPY --from=build /out/expenseflow /app/expenseflow
 COPY web /app/web
-COPY db /app/db
+COPY db/migrations /app/db/migrations
 USER expenseflow
 EXPOSE 8787
 ENV EXPENSEFLOW_ADDR=0.0.0.0:8787 \

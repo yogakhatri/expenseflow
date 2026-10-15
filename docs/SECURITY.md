@@ -13,3 +13,8 @@ Cloud authentication intentionally uses a fast keyed verifier rather than an exp
 The microphone permission policy allows only the same origin so supported browsers can provide voice transcription. ExpenseFlow does not intentionally store audio. Web Speech Recognition may use browser/OS vendor services, so users should not assume speech transcription is fully local.
 
 Never commit Worker secrets, `.dev.vars`, database exports, backup databases or real credentials.
+
+Keep database exports in the ignored `backups/` directory. SQL upgrade exports
+and compressed SQL dumps are ignored by Git and excluded from Docker builds.
+If private data was committed previously, removing the current file does not
+remove it from existing Git history or previously distributed copies.

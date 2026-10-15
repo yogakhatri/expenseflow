@@ -1,0 +1,25 @@
+{
+  "dates": [
+    {"value":"2026-10-14","valid":true},
+    {"value":"2024-02-29","valid":true},
+    {"value":"2026-02-29","valid":false},
+    {"value":"2026-02-30","valid":false},
+    {"value":"2026-04-31","valid":false},
+    {"value":"2026-13-01","valid":false},
+    {"value":"14-10-2026","valid":false}
+  ],
+  "rules": [
+    {"keyword":"petrol","merchant":"","category_id":3,"priority":100,"enabled":true},
+    {"keyword":"special petrol","merchant":"","category_id":4,"priority":10,"enabled":true},
+    {"keyword":"tea","merchant":"","category_id":1,"priority":1,"enabled":false},
+    {"keyword":"","merchant":"Metro","category_id":4,"priority":100,"enabled":true}
+  ],
+  "quick_inputs": [
+    {"text":"500, PETROL, cash","category_id":3},
+    {"text":"500, special petrol, cash","category_id":4},
+    {"text":"500, petrol, cash, , Food","category_id":1},
+    {"text":"500, petrol, cash, , ","category_id":3},
+    {"text":"40, tea, cash","category_id":14},
+    {"text":"80, Metro ride, cash","category_id":4}
+  ]
+}

@@ -1,4 +1,5 @@
-import { Env, json } from './db';
+import type { Env } from './db';
+import { json } from './db';
 
 const COOKIE_NAME = '__Host-expenseflow_session';
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
@@ -92,7 +93,7 @@ async function attemptKey(request: Request, secret: string): Promise<string> {
 
 async function loginBlocked(request: Request, env: Env): Promise<{ blocked: boolean; retryAfter: number; key: string }> {
   const key = await attemptKey(request, env.SESSION_SECRET!);
-  const row = await env.DB.prepare('SELECT failures,window_started,locked_until FROM auth_login_attempts WHERE key=?').bind(key).first<any>();
+  const row = await env.DB.prepare('SELECT locked_until FROM auth_login_attempts WHERE key=?').bind(key).first<any>();
   if (!row) return { blocked: false, retryAfter: 0, key };
   const lockedUntil = row.locked_until ? Date.parse(String(row.locked_until)) : 0;
   const now = Date.now();

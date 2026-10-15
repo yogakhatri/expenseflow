@@ -19,7 +19,7 @@ For an existing deployment, keep the existing D1 `database_id` in the new `wrang
 
 ```bash
 cd cloud
-npm install
+npm ci
 npx wrangler login
 npx wrangler d1 export expenseflow --remote --output=expenseflow-before-upgrade.sql
 npx wrangler d1 migrations list expenseflow --remote

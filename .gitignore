@@ -1,14 +1,15 @@
 node_modules/
-**/node_modules/
 
 .wrangler/
-**/.wrangler/
 
 data/
 backups/
 *.db
 *.db-wal
 *.db-shm
+*.db.restore
+*.db.restore-wal
+*.db.restore-shm
 
 .env
 .env.*
@@ -20,3 +21,14 @@ backups/
 .DS_Store
 .vscode/
 .idea/
+
+# Local build and test output.
+/expenseflow-bin
+/expenseflow-bin.exe
+coverage.out
+coverage/
+
+# Database exports contain private financial data.
+*-before-upgrade.sql
+expenseflow-backup*.sql
+*.sql.gz

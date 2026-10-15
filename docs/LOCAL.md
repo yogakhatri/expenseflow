@@ -19,3 +19,14 @@ Local startup automatically:
 5. starts the HTTP server.
 
 Do not delete `data/expenseflow.db` when upgrading.
+
+Scheduled daily/weekly backups are checked by the startup `/api/bootstrap` request
+and by health checks. Concurrent startup requests create one backup per period.
+SQLite creates consistent snapshots that include committed WAL data.
+
+Restore validates and migrates a temporary copy first, then creates a safety
+backup and replaces the live database while other API requests wait. Migration
+failures leave the live database and the source backup untouched.
+
+AI routes extend the HTTP write deadline to 105 seconds so the 90-second Ollama
+extraction deadline can complete and return a response.

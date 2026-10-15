@@ -14,6 +14,8 @@ func (a *App) handleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.maybeAutoBackup(todayFromHeader(r))
+
 	settings := map[string]string{}
 	rows, err := a.db.Query(`SELECT key,value FROM settings ORDER BY key`)
 	if err != nil {

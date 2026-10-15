@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+const (
+	aiTestTimeout     = 45 * time.Second
+	aiParseTimeout    = 90 * time.Second
+	aiResponseTimeout = aiParseTimeout + 15*time.Second
+)
+
 type aiConfig struct {
 	Enabled    bool
 	URL, Model string
@@ -141,7 +147,7 @@ func (a *App) testAI(cfg aiConfig) (string, string) {
 	var out struct {
 		OK bool `json:"ok"`
 	}
-	if err := postOllamaStructured(cfg.URL, payload, 45*time.Second, &out); err != nil {
+	if err := postOllamaStructured(cfg.URL, payload, aiTestTimeout, &out); err != nil {
 		return "Structured Output Failed", friendlyAIError(err)
 	}
 	if !out.OK {
@@ -224,7 +230,7 @@ func (a *App) parseWithAI(cfg aiConfig, text, localDate string) ([]PreviewItem, 
 	}
 
 	var parsed aiExpenseResult
-	if err := postOllamaStructured(cfg.URL, payload, 90*time.Second, &parsed); err != nil {
+	if err := postOllamaStructured(cfg.URL, payload, aiParseTimeout, &parsed); err != nil {
 		return nil, err
 	}
 	if len(parsed.Items) == 0 || len(parsed.Items) > 100 {
