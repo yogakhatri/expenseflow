@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "typescript": "5.8.3",
-    "wrangler": "4.147.0"
+    "wrangler": "4.149.0"
   },
   "scripts": {
     "check": "tsc --noEmit",
