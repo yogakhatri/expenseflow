@@ -18,8 +18,7 @@ var safeBackupName = regexp.MustCompile(`^[A-Za-z0-9._-]+\.db$`)
 func (a *App) createBackup(tag string) error {
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
-	_, _ = a.db.Exec(`PRAGMA wal_checkpoint(FULL)`)
-	name := time.Now().Format("2006-01-02_150405")
+	name := time.Now().Format("2006-01-02_150405.000000000")
 	if tag != "" {
 		name += "_" + strings.Map(func(r rune) rune {
 			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' {
@@ -29,7 +28,12 @@ func (a *App) createBackup(tag string) error {
 		}, tag)
 	}
 	dst := filepath.Join(a.cfg.BackupDir, name+".db")
-	if err := copyFile(a.cfg.DBPath, dst); err != nil {
+	// SQLite produces a consistent snapshot, including committed WAL pages.
+	if _, err := a.db.Exec(`VACUUM INTO ?`, dst); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	if err := os.Chmod(dst, 0o600); err != nil {
 		return err
 	}
 	return a.pruneBackups()
@@ -146,6 +150,13 @@ func (a *App) handleRestore(w http.ResponseWriter, r *http.Request) {
 	// Validate a temporary copy before touching the live database.
 	tmp := a.cfg.DBPath + ".restore"
 	_ = os.Remove(tmp)
+	_ = os.Remove(tmp + "-wal")
+	_ = os.Remove(tmp + "-shm")
+	defer func() {
+		_ = os.Remove(tmp)
+		_ = os.Remove(tmp + "-wal")
+		_ = os.Remove(tmp + "-shm")
+	}()
 	if err := copyFile(src, tmp); err != nil {
 		writeError(w, 500, "Restore failed")
 		return
@@ -158,10 +169,27 @@ func (a *App) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	var check string
 	err = testDB.QueryRow(`PRAGMA quick_check`).Scan(&check)
-	_ = testDB.Close()
 	if err != nil || check != "ok" {
-		_ = os.Remove(tmp)
+		_ = testDB.Close()
 		writeError(w, 400, "Backup database failed integrity check")
+		return
+	}
+	stagedConfig := a.cfg
+	stagedConfig.DBPath = tmp
+	staged := &App{cfg: stagedConfig, db: testDB}
+	if err := staged.migrateDatabase(false); err != nil {
+		_ = testDB.Close()
+		writeError(w, 400, "Backup database could not be migrated")
+		return
+	}
+	// Flush migration changes before moving the main SQLite file.
+	if _, err := testDB.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		_ = testDB.Close()
+		writeError(w, 500, "Could not prepare restored database")
+		return
+	}
+	if err := testDB.Close(); err != nil {
+		writeError(w, 500, "Could not prepare restored database")
 		return
 	}
 
@@ -198,6 +226,8 @@ func (a *App) handleRestore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) maybeAutoBackup(localDate string) {
+	a.backupMu.Lock()
+	defer a.backupMu.Unlock()
 	schedule := strings.ToLower(a.setting("backup_schedule", "off"))
 	if schedule == "off" || !validateDate(localDate) {
 		return

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func (a *App) securityMiddleware(next http.Handler) http.Handler {
@@ -16,6 +17,21 @@ func (a *App) securityMiddleware(next http.Handler) http.Handler {
 		if isMutation(r.Method) && strings.HasPrefix(r.URL.Path, "/api/") && !sameOriginRequest(r) {
 			writeError(w, http.StatusForbidden, "Cross-site request rejected")
 			return
+		}
+		// Restoring replaces the database handle. Wait for active API requests and
+		// keep new readers and writers out until the replacement is ready.
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if strings.HasPrefix(r.URL.Path, "/api/ai/") {
+				// Model loading and extraction can exceed the ordinary 30s deadline.
+				_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(aiResponseTimeout))
+			}
+			if r.URL.Path == "/api/restore" && r.Method == http.MethodPost {
+				a.dbMu.Lock()
+				defer a.dbMu.Unlock()
+			} else {
+				a.dbMu.RLock()
+				defer a.dbMu.RUnlock()
+			}
 		}
 		next.ServeHTTP(w, r)
 	})

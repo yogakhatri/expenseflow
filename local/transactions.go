@@ -138,6 +138,8 @@ func (a *App) handleTransactionByID(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "version is required")
 			return
 		}
+		a.writeMu.Lock()
+		defer a.writeMu.Unlock()
 		if err := a.validateTransaction(&in); err != nil {
 			writeError(w, 400, err.Error())
 			return
@@ -147,8 +149,6 @@ func (a *App) handleTransactionByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 409, map[string]any{"duplicate": true, "error": "Possible duplicate transaction"})
 			return
 		}
-		a.writeMu.Lock()
-		defer a.writeMu.Unlock()
 		res, err := a.db.Exec(`UPDATE transactions SET amount_paise=?,description=?,category_id=?,payment_method_id=?,account_id=?,transaction_date=?,notes=?,raw_input=?,source=?,fingerprint=?,version=version+1,updated_at=datetime('now') WHERE id=? AND version=?`, in.AmountPaise, in.Description, in.CategoryID, in.PaymentMethodID, in.AccountID, in.TransactionDate, in.Notes, in.RawInput, in.Source, fp, id, in.Version)
 		if err != nil {
 			writeError(w, 500, "Could not update transaction")
@@ -275,6 +275,8 @@ func (a *App) handleBulkCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "Invalid bulk item count")
 		return
 	}
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	seen := map[string]bool{}
 	duplicates := []int{}
 	for i := range req.Items {
@@ -295,8 +297,6 @@ func (a *App) handleBulkCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 409, map[string]any{"duplicate": true, "indexes": duplicates, "error": "Possible duplicate transactions"})
 		return
 	}
-	a.writeMu.Lock()
-	defer a.writeMu.Unlock()
 	tx, err := a.db.Begin()
 	if err != nil {
 		writeError(w, 500, "Could not start save")

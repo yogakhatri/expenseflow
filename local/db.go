@@ -14,9 +14,11 @@ import (
 )
 
 type App struct {
-	cfg     Config
-	db      *sql.DB
-	writeMu sync.Mutex
+	cfg      Config
+	db       *sql.DB
+	writeMu  sync.Mutex
+	dbMu     sync.RWMutex
+	backupMu sync.Mutex
 }
 
 func newApp(cfg Config) (*App, error) {
@@ -51,6 +53,11 @@ func openDB(path string) (*sql.DB, error) {
 }
 
 func (a *App) runMigrations() error {
+	return a.migrateDatabase(true)
+}
+
+// A restore migrates its temporary copy; the original backup is already preserved.
+func (a *App) migrateDatabase(backup bool) error {
 	if _, err := a.db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`); err != nil {
 		return err
 	}
@@ -89,7 +96,7 @@ func (a *App) runMigrations() error {
 	if len(pending) == 0 {
 		return nil
 	}
-	if current > 0 {
+	if backup && current > 0 {
 		tag := fmt.Sprintf("pre-migration-v%d-to-v%d", current, pending[len(pending)-1].version)
 		if err := a.createBackup(tag); err != nil {
 			return fmt.Errorf("backup before migration: %w", err)

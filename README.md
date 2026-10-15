@@ -241,7 +241,7 @@ Windows PowerShell, macOS Terminal or Linux shell:
 
 ```bash
 cd expenseflow/cloud
-npm install
+npm ci
 ```
 
 ### 2. Sign into Cloudflare
@@ -456,7 +456,7 @@ The Ollama Docker volume has the fixed name `expenseflow-ollama-data`, so changi
 
 ```bash
 cd cloud
-npm install
+npm ci
 npx wrangler login
 ```
 
@@ -571,7 +571,7 @@ Restore:
 ./scripts/restore.ps1 -Name BACKUP_FILE.db
 ```
 
-Restore creates a safety backup first.
+Restore migrates a temporary copy of the backup before replacing the live database. A failed migration leaves the live database untouched, and a safety backup is created before replacement. Older backups are ready to use immediately after a successful restore.
 
 ---
 
@@ -739,7 +739,7 @@ On a connected development machine:
 
 ```bash
 go mod verify
-go test ./...
+go test -race ./...
 go vet ./...
 go build -o expenseflow-bin ./local
 ```
@@ -748,8 +748,9 @@ Cloud frontend/Worker check:
 
 ```bash
 cd cloud
-npm install
+npm ci
 npm run check
+npm test
 ```
 
 Docker:
