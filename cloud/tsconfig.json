@@ -5,14 +5,9 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "noEmit": true,
-    "lib": [
-      "ES2022",
-      "WebWorker"
-    ],
+    "lib": ["ES2022", "WebWorker"],
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": [
-    "*.ts"
-  ]
+  "include": ["*.ts"]
 }
